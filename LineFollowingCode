@@ -1,0 +1,117 @@
+#include <opencv2/opencv.hpp>
+
+void SendtoArduino(int leftMotor_speed, int rightMotor_speed, int servoAngle);
+
+int main( int argc, char** argv )
+{
+    cv::VideoCapture cap;
+    cap.open(0);
+
+    if(!cap.isOpened())
+        return -1;
+
+    cv::namedWindow("Photo");
+
+    int Kp = 190, Ki = 0, Kd = 0, integral = 0, derivative = 0, previous_error = 0;
+    double setpoint = 160;
+
+    while(true)
+    {
+        cv::Mat frame;
+        cap.read(frame);
+
+        cv::Mat hsv, mask, gray, binary, bgMask, tapeMask, kernel;
+        cv::cvtColor(frame, hsv, cv::COLOR_BGR2HSV);
+        cv::inRange(hsv, cv::Scalar(25, 70, 70), cv::Scalar(95, 255, 255), mask);
+        kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(5, 5));
+        cv::morphologyEx(mask, mask, cv::MORPH_OPEN, kernel);
+        cv::erode(mask, mask, kernel);
+        cv::dilate(mask, mask, kernel);
+        cv::cvtColor(frame, gray, cv::COLOR_BGR2GRAY);
+        gray.setTo(0, mask);
+        cv::GaussianBlur(gray, gray, cv::Size(5, 5), 0);
+        cv::threshold(gray, binary, 0, 255, cv::THRESH_BINARY_INV | cv::THRESH_OTSU);
+        cv::threshold(gray, bgMask, 240, 255, cv::THRESH_BINARY);
+        bgMask = 255 - bgMask;
+        cv::bitwise_and(binary, bgMask, binary);
+        morphologyEx(binary, tapeMask, MORPH_OPEN, kernel);
+
+        std::vector<std::vector<cv::Point>> contours;
+        cv::findContours(mask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+        cv::drawContours(frame, contours, -1, cv::Scalar(0, 255, 0), 2);
+
+        int y = frame.rows - 50;
+        std::vector<cv::Vec3b> colors;
+        for (int x = 0; x < frame.cols; x++) {
+            cv::Vec3b color = frame.at<cv::Vec3b>(y, x);
+            colors.push_back(color);
+        }
+
+        cv::Mat bottomRow = mask.row(mask.rows-50);
+
+        int start = -1, end = -1;
+        for (int x = 0; x < bottomRow.cols; x++) {
+            if (start == -1 && bottomRow.at<uchar>(0, x) == 255) {
+                start = x;
+            }
+            else if (start != -1 && end == -1 && bottomRow.at<uchar>(0, x) == 0) {
+                end = x - 1;
+                break;
+            }
+        }
+
+        int error = 0;
+        if (start != -1 && end != -1) {
+            int center = (start + end) / 2;
+            error = center - setpoint;
+        }
+
+        integral += error;
+        derivative = error - previous_error;
+        previous_error = error;
+
+        int leftMotor_speed = Kp * error + Ki * integral + Kd * derivative;
+        int rightMotor_speed = Kp * error + Ki * integral + Kd * derivative;
+     
+    
+    error = setpoint - position;
+
+
+    double proportional = Kp * error;
+
+    
+    integral += error;
+    double integral_term = Ki * integral;
+
+   
+    double derivative_term = Kd * (error - previous_error);
+    previous_error = error;
+
+    
+    double output = proportional + integral_term + derivative_term;
+
+   
+    int leftMotor_speed = 0;
+    int rightMotor_speed = 0;
+    int servoAngle = 90;
+
+    if (output > 0) {
+        leftMotor_speed = (int)(255 * output);
+        rightMotor_speed = (int)(255 * (1 - output));
+    } else {
+        leftMotor_speed = (int)(255 * (1 + output));
+        rightMotor_speed = (int)(255 * -output);
+    }
+
+    SendtoArduino(leftMotor_speed, rightMotor_speed, servoAngle);
+
+    cv::imshow("Photo", frame);
+
+    
+    int key = cv::waitKey(1);
+    if (key == 'q')
+        break;
+}
+
+return 0;
+
