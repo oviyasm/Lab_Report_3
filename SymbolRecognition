@@ -1,0 +1,280 @@
+#include <stdio.h>
+#include <iostream>
+#include "opencv2/core.hpp"
+#include "opencv2/highgui.hpp"
+#include "opencv2/imgproc.hpp"
+using namespace cv;
+
+Point findContourCentre(std::vector<cv::Point> contour)
+{
+
+    Moments foundRegion;    // Variables to store the region moment and the centre point
+    Point centre;
+    foundRegion = moments(contour, false);      // Calculate the moment for the contour
+    centre.x = (foundRegion.m10/foundRegion.m00);  //Calculate the X and Y positions
+    centre.y = (foundRegion.m01/foundRegion.m00);
+
+    return centre;
+}
+float compareImages(Mat cameraImage, Mat librarySymbol)
+{
+    float matchPercent = 100 - (100/((float)librarySymbol.cols*(float)librarySymbol.rows) * (2*(float)countNonZero(librarySymbol^cameraImage))); // An incorrect pixel has double weighting
+    return matchPercent;
+}
+
+Mat transformPerspective(std::vector<Point> boundingContour, Mat frame, int x_size, int y_size)
+{
+
+
+    if(boundingContour.size() != 4)
+    {
+        // Error the contour has too many points. Only 4 are allowed
+        Mat emptyMat;
+        return emptyMat;
+    }
+
+    Mat symbol(y_size,x_size,CV_8UC1, Scalar(0));
+
+    Point2f symbolCorners[4], boundingCorners[4];      // Create (and populate) variables containing the corner locations for the transform
+    symbolCorners[0] = Point2f(0,0);
+    symbolCorners[1] = Point2f(symbol.cols - 1,0);
+    symbolCorners[2] = Point2f(symbol.cols - 1,symbol.rows - 1);
+    symbolCorners[3] = Point2f(0,symbol.rows - 1);
+
+    Point contourCentre = findContourCentre(boundingContour);   // To populate the contour corners we need to check the order of the points
+
+    int point1, point2, point3, point4;
+
+    if(boundingContour[0].x > contourCentre.x)
+    {
+        if(boundingContour[0].y > contourCentre.y)
+            point3 = 0;
+        else
+            point2 = 0;
+    }
+    else
+    {
+        if(boundingContour[0].y > contourCentre.y)
+            point4 = 0;
+        else
+            point1 = 0;
+    }
+
+    if(boundingContour[1].x > contourCentre.x)
+    {
+        if(boundingContour[1].y > contourCentre.y)
+            point3 = 1;
+        else
+            point2 = 1;
+    }
+    else
+    {
+        if(boundingContour[1].y > contourCentre.y)
+            point4 = 1;
+        else
+            point1 = 1;
+    }
+
+    if(boundingContour[2].x > contourCentre.x)
+    {
+        if(boundingContour[2].y > contourCentre.y)
+            point3 = 2;
+        else
+            point2 = 2;
+    }
+    else
+    {
+        if(boundingContour[2].y > contourCentre.y)
+            point4 = 2;
+        else
+            point1 = 2;
+    }
+
+    if(boundingContour[3].x > contourCentre.x)
+    {
+        if(boundingContour[3].y > contourCentre.y)
+            point3 = 3;
+        else
+            point2 = 3;
+    }
+    else
+    {
+        if(boundingContour[3].y > contourCentre.y)
+            point4 = 3;
+        else
+            point1 = 3;
+    }
+
+    if(point1 + point2 + point3 + point4 != 6)
+    {
+        //Unable to reconstruct rectangle
+        Mat emptyMat;
+        return emptyMat;
+    }
+
+    boundingCorners[0] = boundingContour[point1];
+    boundingCorners[1] = boundingContour[point2];
+    boundingCorners[2] = boundingContour[point3];
+    boundingCorners[3] = boundingContour[point4];
+
+    Mat transformMatrix = cv::getPerspectiveTransform(boundingCorners, symbolCorners); // Calculate the required transform operation
+    Mat transformedSymbol(240,320,CV_8UC1,Scalar(0));
+    warpPerspective(frame, transformedSymbol, transformMatrix, cv::Size(symbol.cols,symbol.rows));  // Perform the transformation
+
+    return transformedSymbol;
+}
+
+Mat Umbrella() {
+        std::vector<std::vector<cv::Point> > contours;
+        std::vector<cv::Point> boundingcontours;
+        std::vector<cv::Vec4i> hierarchy;
+        Size kernel(3,3);
+        Mat frame=imread("Umbrella (Yellow Line).png");
+        Mat symbol;
+        cvtColor(frame,symbol,COLOR_BGR2GRAY);
+        Mat blur_img;
+        GaussianBlur(symbol,blur_img,kernel,0);
+        Mat thresh_img;
+        threshold(blur_img,thresh_img,200,255,THRESH_BINARY);
+        Mat input;
+        cv::findContours(thresh_img,contours,hierarchy,cv::RETR_EXTERNAL,cv::CHAIN_APPROX_SIMPLE);
+        Mat image_copy = frame.clone();
+        drawContours(image_copy, contours, -1, Scalar(0, 255, 0), 2);
+        approxPolyDP( Mat(contours[0]), boundingcontours, 3, true );
+        Mat perspTransform=transformPerspective(boundingcontours,frame,350,350);
+        imshow("Colour Finder",perspTransform);
+        Mat perspTransformGray;
+        cvtColor(perspTransform,perspTransformGray,COLOR_BGR2GRAY);
+        threshold(perspTransformGray,thresh_img,200,255,THRESH_BINARY);
+        return thresh_img;
+}
+Mat Star() {
+        std::vector<std::vector<cv::Point> > contours;
+        std::vector<cv::Point> boundingcontours;
+        std::vector<cv::Vec4i> hierarchy;
+        Size kernel(3,3);
+        Mat frame=imread("Star (Green Line).png");
+        Mat symbol;
+        cvtColor(frame,symbol,COLOR_BGR2GRAY);
+        Mat blur_img;
+        GaussianBlur(symbol,blur_img,kernel,0);
+        Mat thresh_img;
+        threshold(blur_img,thresh_img,200,255,THRESH_BINARY);
+        Mat input;
+        cv::findContours(thresh_img,contours,hierarchy,cv::RETR_EXTERNAL,cv::CHAIN_APPROX_SIMPLE);
+        Mat image_copy = frame.clone();
+        drawContours(image_copy, contours, -1, Scalar(0, 255, 0), 2);
+        approxPolyDP( Mat(contours[0]), boundingcontours, 3, true );
+        Mat perspTransform=transformPerspective(boundingcontours,frame,350,350);
+        imshow("Colour Finder",perspTransform);
+        Mat perspTransformGray;
+        cvtColor(perspTransform,perspTransformGray,COLOR_BGR2GRAY);
+        threshold(perspTransformGray,thresh_img,200,255,THRESH_BINARY);
+        return thresh_img;
+}
+Mat Triangle() {
+        std::vector<std::vector<cv::Point> > contours;
+        std::vector<cv::Point> boundingcontours;
+        std::vector<cv::Vec4i> hierarchy;
+        Size kernel(3,3);
+        Mat frame=imread("triangle (Blue Line).png");
+        Mat symbol;
+        cvtColor(frame,symbol,COLOR_BGR2GRAY);
+        Mat blur_img;
+        GaussianBlur(symbol,blur_img,kernel,0);
+        Mat thresh_img;
+        threshold(blur_img,thresh_img,200,255,THRESH_BINARY);
+        Mat input;
+        cv::findContours(thresh_img,contours,hierarchy,cv::RETR_EXTERNAL,cv::CHAIN_APPROX_SIMPLE);
+        Mat image_copy = frame.clone();
+        drawContours(image_copy, contours, -1, Scalar(0, 255, 0), 2);
+        approxPolyDP( Mat(contours[0]), boundingcontours, 3, true );
+        Mat perspTransform=transformPerspective(boundingcontours,frame,350,350);
+        imshow("Colour Finder",perspTransform);
+        Mat perspTransformGray;
+        cvtColor(perspTransform,perspTransformGray,COLOR_BGR2GRAY);
+        threshold(perspTransformGray,thresh_img,200,255,THRESH_BINARY);
+        return thresh_img;
+}
+Mat Circle() {
+        std::vector<std::vector<cv::Point> > contours;
+        std::vector<cv::Point> boundingcontours;
+        std::vector<cv::Vec4i> hierarchy;
+        Size kernel(3,3);
+        Mat frame=imread("Circle (Red Line).png");
+        Mat symbol;
+        cvtColor(frame,symbol,COLOR_BGR2GRAY);
+        Mat blur_img;
+        GaussianBlur(symbol,blur_img,kernel,0);
+        Mat thresh_img;
+        threshold(blur_img,thresh_img,200,255,THRESH_BINARY);
+        Mat input;
+        cv::findContours(thresh_img,contours,hierarchy,cv::RETR_EXTERNAL,cv::CHAIN_APPROX_SIMPLE);
+        Mat image_copy = frame.clone();
+        drawContours(image_copy, contours, -1, Scalar(0, 255, 0), 2);
+        approxPolyDP( Mat(contours[0]), boundingcontours, 3, true );
+        Mat perspTransform=transformPerspective(boundingcontours,frame,350,350);
+        imshow("Colour Finder",perspTransform);
+        Mat perspTransformGray;
+        cvtColor(perspTransform,perspTransformGray,COLOR_BGR2GRAY);
+        threshold(perspTransformGray,thresh_img,200,255,THRESH_BINARY);
+        return thresh_img;
+}
+
+int main()
+{
+    std::vector<std::vector<cv::Point> > contours;
+    std::vector<cv::Point> boundingcontours;
+    std::vector<cv::Vec4i> hierarchy;
+    Size kernel(3,3);
+    namedWindow("Colour Finder");
+    while(1)
+    {
+
+        Mat frame=imread("Star (Green Line).png");
+        Mat symbol;
+        cvtColor(frame,symbol,COLOR_BGR2GRAY);
+        Mat blur_img;
+        GaussianBlur(symbol,blur_img,kernel,0);
+        Mat thresh_img;
+        threshold(blur_img,thresh_img,200,255,THRESH_BINARY);
+        Mat input;
+        cv::findContours(thresh_img,contours,hierarchy,cv::RETR_EXTERNAL,cv::CHAIN_APPROX_SIMPLE);
+        Mat image_copy = frame.clone();
+        drawContours(image_copy, contours, -1, Scalar(0, 255, 0), 2);
+        approxPolyDP( Mat(contours[0]), boundingcontours, 3, true );
+        Mat perspTransform=transformPerspective(boundingcontours,frame,350,350);
+        imshow("Colour Finder",perspTransform);
+        Mat perspTransformGray;
+        cvtColor(perspTransform,perspTransformGray,COLOR_BGR2GRAY);
+        threshold(perspTransformGray,thresh_img,200,255,THRESH_BINARY);
+
+        Mat circle =Circle();
+        Mat star =Star();
+        Mat triangle =Triangle();
+        Mat umbrella =Umbrella();
+
+        float C=compareImages(thresh_img,circle);
+        float S=compareImages(thresh_img,star);
+        float T=compareImages(thresh_img,triangle);
+        float U=compareImages(thresh_img,umbrella);
+
+        if (C>80.0)
+            printf("Circle (Red)");
+        else if (S>80.0)
+            printf("Star (Green)");
+        else if (T>80.0)
+            printf("Triangle (Blue)");
+        else if (U>80.0)
+            printf("Umbrella (Yellow)");
+        else
+            printf("None (Black)");
+
+        int key=cv::waitKey(1);
+        key=(key==255) ?-1:key;
+        if (key==27)
+            break;
+    }
+    destroyAllWindows();
+    return 0;
+}
